@@ -1,0 +1,6 @@
+[package]
+name = "snake"
+version = "0.1.0"
+authors = ["Andrey Khranovsky <andrey.khranovsky@gmail.com>"]
+
+[dependencies]
