@@ -19,6 +19,10 @@ const BOTTOM_LEFT_CORNER: &'static str = "└";
 // The bottom-right corner
 const BOTTOM_RIGHT_CORNER: &'static str = "┘";
 
+const SNAKE_FOOD: &'static str = "🐭";
+const SNAKE_HEAD: &'static str = "■";
+const SNAKE_BODY: &'static str = "□";
+
 fn main() {
     // Get and lock the stdios
     let stdout = io::stdout();
@@ -60,9 +64,16 @@ fn main() {
     stdout.write(BOTTOM_RIGHT_CORNER.as_bytes()).unwrap();
     stdout.write(b"\n\r").unwrap();
 
-    let mut stdin_keys = stdin.keys();
+    write!(stdout, "{}", cursor::Goto(43,12)).unwrap();
+    write!(stdout, "{}", SNAKE_FOOD).unwrap();
+
+    write!(stdout, "{}", cursor::Goto(50,12)).unwrap();
+    write!(stdout, "{}{}{}", SNAKE_HEAD, SNAKE_BODY, SNAKE_BODY).unwrap();
+    stdout.flush().unwrap();
+
+    let mut keys = stdin.keys();
     loop {
-        let b = stdin_keys.next().unwrap().unwrap();
+        let b = keys.next().unwrap().unwrap();
 
         use termion::event::Key::*;
 
@@ -70,5 +81,6 @@ fn main() {
             Char('q') => return,
             _ => {}
         }
+        stdout.flush().unwrap();
     }
 }
