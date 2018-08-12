@@ -1,10 +1,12 @@
 extern crate termion;
 
 // use termion::event::Key;
-use termion::input::TermRead;
 use std::io::{self, Read, Write};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
+use termion::input::TermRead;
 use termion::raw::IntoRawMode;
-use termion::{clear, cursor, style};
+use termion::{async_stdin, clear, cursor, style};
 
 // The upper and lower boundary char.
 const HORZ_BOUNDARY: &'static str = "─";
@@ -23,13 +25,43 @@ const SNAKE_FOOD: &'static str = "🐭";
 const SNAKE_HEAD: &'static str = "■";
 const SNAKE_BODY: &'static str = "□";
 
+struct Snake {
+    head: usize,
+    body: Vec<usize>,
+}
+
+struct Game<R: Read, W: Write> {
+    width: usize,
+    height: usize,
+    stdin: R,
+    stdout: W,
+    rate: usize,
+}
+
+impl<R: Read, W: Write> Game<R, W> {
+    fn start(&mut self) {
+        //        clear();
+        //
+        //        init_snake();
+        //        init_food();
+        //
+        //        draw_border();
+        //
+        //        loop{
+        //            let input = 8;
+        //        }
+        //        draw_snake();
+        //        draw_food();
+        //
+    }
+}
+
 fn main() {
     // Get and lock the stdios
     let stdout = io::stdout();
     let stdout = stdout.lock();
 
-    let stdin = io::stdin();
-    let stdin = stdin.lock();
+    let mut stdin = async_stdin();
 
     // let stderr = io::stderr();
     // let mut stderr = stderr.lock();
@@ -64,23 +96,39 @@ fn main() {
     stdout.write(BOTTOM_RIGHT_CORNER.as_bytes()).unwrap();
     stdout.write(b"\n\r").unwrap();
 
-    write!(stdout, "{}", cursor::Goto(43,12)).unwrap();
+    write!(stdout, "{}", cursor::Goto(43, 12)).unwrap();
     write!(stdout, "{}", SNAKE_FOOD).unwrap();
 
-    write!(stdout, "{}", cursor::Goto(50,12)).unwrap();
-    write!(stdout, "{}{}{}", SNAKE_HEAD, SNAKE_BODY, SNAKE_BODY).unwrap();
-    stdout.flush().unwrap();
-
-    let mut keys = stdin.keys();
+    let mut pos = (50, 12);
+    //    let mut keys = stdin.keys();
+    let mut last = Instant::now();
     loop {
-        let b = keys.next().unwrap().unwrap();
+        let mut buf = [0];
+        stdin.read(&mut buf).unwrap();
 
-        use termion::event::Key::*;
-
-        match b {
-            Char('q') => return,
+        match buf[0] {
+            b'q' => return,
             _ => {}
         }
         stdout.flush().unwrap();
+
+
+        write!(stdout, "{}", cursor::Goto(pos.0, pos.1)).unwrap();
+        write!(stdout, "{}{}{}", SNAKE_HEAD, SNAKE_BODY, SNAKE_BODY).unwrap();
+        stdout.flush().unwrap();
+
+        let now = Instant::now();
+        let dt = (now.duration_since(last).subsec_nanos() / 1_000_000) as u64;
+        let duration = 300;
+        if dt < duration {
+            sleep(Duration::from_millis(duration - dt));
+            continue;
+        }
+        last = now;
+
+        pos.0 -= 1;
+        if pos.0 == 0 {
+            pos.0 = width - 10;
+        }
     }
 }
