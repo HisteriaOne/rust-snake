@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
-use termion::{async_stdin, clear, cursor, style};
+use termion::{async_stdin, cursor};
 
 // The upper and lower boundary char.
 const HORZ_BOUNDARY: &'static str = "─";
@@ -53,7 +53,7 @@ fn move_ord(width: u16, ord: u32, dir: Direction) -> u32 {
 struct Snake {
     head: u32,
     body: VecDeque<u32>,
-    direction: Direction,
+    //direction: Direction,
 }
 
 impl Snake {
@@ -91,7 +91,7 @@ impl<R: Read, W: Write> Game<R, W> {
         let snake = Snake {
             head: coord2ord(width, width / 2, height / 2),
             body: VecDeque::new(),
-            direction: Direction::Up,
+            //direction: Direction::Up,
         };
         let food = coord2ord(width, width / 4, height / 3);
 
@@ -138,15 +138,57 @@ impl<R: Read, W: Write> Game<R, W> {
         }
     }
     fn move_snake(&mut self, dir: Direction) {
+        if self.snake.head == 0 {
+            return;
+        }
         let tail = ord2coord(self.width, self.snake.tail());
-        write!(self.stdout, "{} ", cursor::Goto(tail.0, tail.1));
+        write!(self.stdout, "{} ", cursor::Goto(tail.0, tail.1)).unwrap();
 
         let new_head = move_ord(self.width, self.snake.head, dir);
-        self.snake.crawl(new_head);
+        if new_head == self.food {
+            let tail = self.snake.tail();
+            self.snake.body.push_back(tail);
+        }
+        if self.snake.body.contains(&new_head) {
+            self.game_over();
+        //  game over
+        } else if self.is_border(new_head) {
+            self.game_over();
+        // game over
+        } else {
+            self.snake.crawl(new_head);
+        }
+    }
+    fn game_over(&mut self) {
+        let head = self.snake.head;
+        self.snake.head = 0;
+        self.draw_symbol(" ", head);
+
+        let body = self.snake.body.clone();
+        self.snake.body.clear();
+        for part in &body {
+            self.draw_symbol(" ", *part);
+        }
+
+        let food = self.food;
+        self.food = 0;
+        self.draw_symbol(" ", food);
+
+        write!(
+            self.stdout,
+            "{}GAME OVER!",
+            cursor::Goto(self.width / 2 - 5, self.height / 2)
+        ).unwrap();
+    }
+    fn is_border(&self, ord: u32) -> bool {
+        let pos = ord2coord(self.width, ord);
+        pos.0 == 1 || pos.0 == self.width || pos.1 == 1 || pos.1 == self.height - 1
     }
     fn draw_symbol(&mut self, symb: &str, ord: u32) {
-        let pos = ord2coord(self.width, ord);
-        write!(self.stdout, "{}{}", cursor::Goto(pos.0, pos.1), symb).unwrap();
+        if ord > 0 {
+            let pos = ord2coord(self.width, ord);
+            write!(self.stdout, "{}{}", cursor::Goto(pos.0, pos.1), symb).unwrap();
+        }
     }
     fn draw_food(&mut self) {
         let food = self.food;
@@ -155,7 +197,10 @@ impl<R: Read, W: Write> Game<R, W> {
     fn draw_snake(&mut self) {
         let head = self.snake.head;
         self.draw_symbol(SNAKE_HEAD, head);
-        //self.snake.body.iter().map(|ord| self.draw_symbol(SNAKE_BODY, *ord));
+        let body = self.snake.body.clone();
+        for part in &body {
+            self.draw_symbol(SNAKE_BODY, *part);
+        }
     }
     fn update(&mut self) {
         self.stdout.flush().unwrap();
@@ -170,14 +215,13 @@ impl<R: Read, W: Write> Game<R, W> {
         self.stdout.write(TOP_RIGHT_CORNER.as_bytes()).unwrap();
         self.stdout.write(b"\n\r").unwrap();
 
-        for h in 0..self.height - 3 {
-            let y: u16 = h + 2;
+        for h in 2..self.height - 1 {
             write!(
                 self.stdout,
                 "{}{}{}{}\n\r",
-                cursor::Goto(1, y),
+                cursor::Goto(1, h),
                 VERT_BOUNDARY,
-                cursor::Goto(self.width, y),
+                cursor::Goto(self.width, h),
                 VERT_BOUNDARY
             ).unwrap();
         }
@@ -195,35 +239,9 @@ fn main() {
     // Get and lock the stdios
     let stdout = io::stdout();
     let stdout = stdout.lock();
-    let mut stdout = stdout.into_raw_mode().unwrap();
+    let stdout = stdout.into_raw_mode().unwrap();
 
     let stdin = async_stdin();
 
-    let mut game = Game::new(stdin, stdout);
-    game.start();
-
-    // let mut pos = (50, 12);
-    // //    let mut keys = stdin.keys();
-    // let mut last = Instant::now();
-    // loop {
-    //     let mut buf = [0];
-    //     stdin.read(&mut buf).unwrap();
-
-    //     match buf[0] {
-    //         b'q' => return,
-    //         _ => {}
-    //     }
-    //     stdout.flush().unwrap();
-
-    //     write!(stdout, "{}", cursor::Goto(pos.0, pos.1)).unwrap();
-    //     write!(stdout, "{}{}{}", SNAKE_HEAD, SNAKE_BODY, SNAKE_BODY).unwrap();
-    //     stdout.flush().unwrap();
-
-    //     let now = Instant::now();
-
-    //     pos.0 -= 1;
-    //     if pos.0 == 0 {
-    //         pos.0 = width - 10;
-    //     }
-    // }
+    Game::new(stdin, stdout).start();
 }
