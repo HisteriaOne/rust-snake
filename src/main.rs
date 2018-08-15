@@ -6,7 +6,7 @@ use std::io::{self, Read, Write};
 // use std::time::{Duration, Instant};
 use termion::event::Key;
 use termion::input::TermRead;
-// use termion::raw::IntoRawMode;
+use termion::raw::IntoRawMode;
 use termion::{async_stdin, cursor};
 
 // // The upper and lower boundary char.
@@ -66,10 +66,16 @@ impl ScreenExtent {
     }
 }
 
-struct Display<W: Write> {
+trait Draw {
+    fn draw(&mut self, pos: &Point, data: &str);
+    fn clear(&mut self, pos: &Point);
+}
+
+struct SymbolDisplay<W: Write> {
     device: W,
 }
-impl<W: Write> Display<W> {
+
+impl<W: Write> Draw for SymbolDisplay<W> {
     fn draw(&mut self, pos: &Point, data: &str) {
         write!(self.device, "{}{}", cursor::Goto(pos.0, pos.1), data).unwrap();
         self.device.flush().unwrap();
@@ -79,10 +85,15 @@ impl<W: Write> Display<W> {
     }
 }
 
-struct Input<R: Read> {
+trait Input {
+    fn last(&mut self) -> Option<Key>;
+}
+
+struct SymbolInput<R: Read> {
     device: R,
 }
-impl<R: Read> Input<R> {
+
+impl<R: Read> Input for SymbolInput<R> {
     fn last(&mut self) -> Option<Key> {
         let mut buffer: Vec<u8> = vec![];
         match self.device.read_to_end(&mut buffer) {
@@ -140,7 +151,7 @@ impl<R: Read> Input<R> {
 // }
 
 // struct Game<R: Read, W: Write> {
-//     width: u16,
+//       width: u16,
 //     height: u16,
 //     stdin: R,
 //     stdout: W,
@@ -303,14 +314,15 @@ impl<R: Read> Input<R> {
 // }
 
 fn main() {
-    // Get and lock the stdios
-    // let stdout = io::stdout();
-    // let stdout = stdout.lock();
-    // let stdout = stdout.into_raw_mode().unwrap();
+    let stdout = io::stdout();
+    let stdout = stdout.lock();
+    let stdout = stdout.into_raw_mode().unwrap();
 
-    // let stdin = async_stdin();
+    let mut display = SymbolDisplay { device: stdout };
+    display.draw(&(10,10), "Hello!");
 
-    // Game::new(stdin, stdout).start();
+    let stdin = async_stdin();
+    let input = SymbolInput { device: stdin };
 }
 
 #[cfg(test)]
