@@ -1,13 +1,13 @@
 extern crate termion;
 
 // use std::collections::VecDeque;
-// use std::io::{self, Read, Write};
+use std::io::{self, Read, Write};
 // use std::thread::sleep;
 // use std::time::{Duration, Instant};
-// use termion::event::Key;
-// use termion::input::TermRead;
+use termion::event::Key;
+use termion::input::TermRead;
 // use termion::raw::IntoRawMode;
-// use termion::{async_stdin, cursor};
+use termion::{async_stdin, cursor};
 
 // // The upper and lower boundary char.
 // const HORZ_BOUNDARY: &'static str = "─";
@@ -65,6 +65,36 @@ impl ScreenExtent {
             && pt.1 < self.bottom_right.1
     }
 }
+
+struct Display<W: Write> {
+    device: W,
+}
+impl<W: Write> Display<W> {
+    fn draw(&mut self, pos: &Point, data: &str) {
+        write!(self.device, "{}{}", cursor::Goto(pos.0, pos.1), data).unwrap();
+        self.device.flush().unwrap();
+    }
+    fn clear(&mut self, pos: &Point) {
+        self.draw(pos, " ");
+    }
+}
+
+struct Input<R: Read> {
+    device: R,
+}
+impl<R: Read> Input<R> {
+    fn last(&mut self) -> Option<Key> {
+        let mut buffer: Vec<u8> = vec![];
+        match self.device.read_to_end(&mut buffer) {
+            Ok(_) => match buffer.keys().last() {
+                Some(Ok(key)) => Some(key),
+                _ => None,
+            },
+            Err(_) => None,
+        }
+    }
+}
+
 //
 // enum Direction {
 //     Up,
