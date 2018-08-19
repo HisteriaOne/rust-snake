@@ -41,6 +41,13 @@ struct ScreenExtent {
 }
 
 impl ScreenExtent {
+    fn from_terminal(default: (Coordinate, Coordinate)) -> Self {
+        let termsize = termion::terminal_size().ok();
+        let width = termsize.map(|(w, _)| w).unwrap_or(default.0);
+        let height = termsize.map(|(_, h)| h).unwrap_or(default.1);
+        ScreenExtent::new(width, height)
+    }
+
     fn new(width: Coordinate, height: Coordinate) -> Self {
         assert!(width > 1);
         assert!(height > 1);
@@ -199,9 +206,6 @@ fn draw_border(out: &mut Draw, extent: &ScreenExtent) {
 //
 // impl<R: Read, W: Write> Game<R, W> {
 //     fn new(stdin: R, stdout: W) -> Self {
-//         let termsize = termion::terminal_size().ok();
-//         let width = termsize.map(|(w, _)| w).unwrap_or(70);
-//         let height = termsize.map(|(_, h)| h).unwrap_or(30);
 //
 //         let snake = Snake {
 //             head: coord2ord(width, width / 2, height / 2),
@@ -299,12 +303,6 @@ fn draw_border(out: &mut Draw, extent: &ScreenExtent) {
 //         let pos = ord2coord(self.width, ord);
 //         pos.0 == 1 || pos.0 == self.width || pos.1 == 1 || pos.1 == self.height - 1
 //     }
-//     fn draw_symbol(&mut self, symb: &str, ord: u32) {
-//         if ord > 0 {
-//             let pos = ord2coord(self.width, ord);
-//             write!(self.stdout, "{}{}", cursor::Goto(pos.0, pos.1), symb).unwrap();
-//         }
-//     }
 //     fn draw_food(&mut self) {
 //         let food = self.food;
 //         self.draw_symbol(SNAKE_FOOD, food);
@@ -326,11 +324,7 @@ fn main() {
 
     let mut display = SymbolDisplay { device: stdout };
 
-    let termsize = termion::terminal_size().ok();
-    let width = termsize.map(|(w, _)| w).unwrap_or(70);
-    let height = termsize.map(|(_, h)| h).unwrap_or(30);
-
-    let extent = ScreenExtent::new(width, height);
+    let extent = ScreenExtent::from_terminal((70, 30));
     draw_border(&mut display, &extent);
 
     let stdin = async_stdin();
