@@ -141,13 +141,39 @@ fn draw_border(out: &mut Draw, extent: &ScreenExtent) {
             VERT_BOUNDARY, inner_line, VERT_BOUNDARY, NEWLINE
         ).repeat(inner_height),
         format!(
-            "{}{}{}{}",
-            BOTTOM_LEFT_CORNER, horz_border, BOTTOM_RIGHT_CORNER, NEWLINE
+            "{}{}{}",
+            BOTTOM_LEFT_CORNER, horz_border, BOTTOM_RIGHT_CORNER
         )
     );
 
     out.draw(&extent.top_left, &border);
     out.update();
+}
+
+#[derive(Debug)]
+enum GameState {
+    Begin,
+    InGame(Option<Key>),
+    GameOver,
+    Quit,
+}
+
+fn game_state_transition(state: &GameState, input: &mut Input) -> GameState {
+    let key = input.last();
+
+    match state {
+        GameState::Begin => GameState::InGame(key),
+        GameState::InGame(_) => match key {
+            Some(Key::Char('q')) => GameState::Quit,
+            _ => GameState::InGame(key),
+        },
+        GameState::GameOver => match key {
+            Some(Key::Char('b')) => GameState::Begin,
+            Some(Key::Char('q')) => GameState::Quit,
+            _ => GameState::GameOver,
+        },
+        GameState::Quit => GameState::Quit,
+    }
 }
 
 //
@@ -194,17 +220,41 @@ fn draw_border(out: &mut Draw, extent: &ScreenExtent) {
 //     }
 // }
 
-// struct Game<R: Read, W: Write> {
-//       width: u16,
-//     height: u16,
-//     stdin: R,
-//     stdout: W,
-//     rate: u16,
-//     snake: Snake,
-//     food: u32,
-// }
-//
-// impl<R: Read, W: Write> Game<R, W> {
+struct Game<I: Input, D: Draw> {
+    screen: ScreenExtent,
+    input: I,
+    output: D,
+    state: GameState,
+}
+
+impl<I: Input, D: Draw> Game<I, D> {
+    fn new(input: I, output: D, screen: ScreenExtent) -> Self {
+        Game {
+            screen: screen,
+            input: input,
+            output: output,
+            state: GameState::Begin,
+        }
+    }
+    fn run(&mut self) {
+        loop {
+            match self.state {
+                GameState::Begin => {
+                    self.output.clear();
+                    draw_border(&mut self.output, &self.screen);
+                }
+                GameState::InGame(_) => {}
+                GameState::GameOver => {}
+                GameState::Quit => {
+                    self.output.clear();
+                    return;
+                }
+            }
+            self.state = game_state_transition(&self.state, &mut self.input);
+        }
+    }
+}
+
 //     fn new(stdin: R, stdout: W) -> Self {
 //
 //         let snake = Snake {
@@ -318,17 +368,17 @@ fn draw_border(out: &mut Draw, extent: &ScreenExtent) {
 // }
 
 fn main() {
+    let stdin = async_stdin();
+    let input = SymbolInput { device: stdin };
+
     let stdout = io::stdout();
     let stdout = stdout.lock();
     let stdout = stdout.into_raw_mode().unwrap();
-
-    let mut display = SymbolDisplay { device: stdout };
+    let mut output = SymbolDisplay { device: stdout };
 
     let extent = ScreenExtent::from_terminal((70, 30));
-    draw_border(&mut display, &extent);
 
-    let stdin = async_stdin();
-    let input = SymbolInput { device: stdin };
+    Game::new(input, output, extent).run();
 }
 
 #[cfg(test)]
