@@ -262,7 +262,7 @@ impl Snake {
     }
     fn self_cross(&self) -> bool {
         let head = self.head();
-        self.body.len() > 1 && self.body.iter().filter(|&x| x == head).count() == 1
+        self.body.len() != 1 && self.body.iter().filter(|&x| x == head).count() != 1
     }
 }
 
@@ -296,13 +296,14 @@ struct Game<I: Input, D: Draw> {
 impl<I: Input, D: Draw> Game<I, D> {
     fn new(input: I, output: D, screen: ScreenExtent) -> Self {
         let snake = Snake::new((screen.width / 2, screen.height / 2), Direction::Up);
+        let food = (screen.width / 2, screen.height / 2 - 2);
         Game {
             screen: screen,
             input: input,
             output: output,
             state: GameState::Begin,
             snake: snake,
-            food: (10, 15),
+            food: food,
         }
     }
 
@@ -317,17 +318,22 @@ impl<I: Input, D: Draw> Game<I, D> {
                 GameState::InGame(key) => {
                     self.snake.clear(&mut self.output);
                     self.snake = self.snake.update(key_to_direction(key));
-                    // if let Some(snake) = self.snake.eat(&self.food) {
-                    //     self.snake = snake;
-                    //     self.food = (self.food.1, self.food.0);
-                    // }
 
+                    // self.output.draw(
+                    //     &self.screen.top_left,
+                    //     &format!("{}{:?}", termion::clear::CurrentLine, &self.snake.body),
+                    // );
                     if !self.screen.contains(&self.snake.head()) {
                         self.state = GameState::GameOver;
                     } else if self.snake.self_cross() {
                         self.state = GameState::GameOver;
                     } else {
+                        if let Some(snake) = self.snake.eat(&self.food) {
+                            self.snake = snake;
+                            self.food = (self.food.1, self.food.0);
+                        }
                         self.snake.draw(&mut self.output);
+                        self.output.draw(&self.food, "X");
                         self.output.update();
                     }
                 }
