@@ -9,18 +9,6 @@ use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{async_stdin, cursor};
 
-// // The upper and lower boundary char.
-// const HORZ_BOUNDARY: &'static str = "─";
-// // The left and right boundary char.
-// const VERT_BOUNDARY: &'static str = "│";
-// // The top-left corner
-// const TOP_LEFT_CORNER: &'static str = "┌";
-// // The top-right corner
-// const TOP_RIGHT_CORNER: &'static str = "┐";
-// // The bottom-left corner
-// const BOTTOM_LEFT_CORNER: &'static str = "└";
-// // The bottom-right corner
-// const BOTTOM_RIGHT_CORNER: &'static str = "┘";
 //
 // const SNAKE_FOOD: &'static str = "□";
 // const SNAKE_HEAD: &'static str = "@";
@@ -48,6 +36,8 @@ fn checked_sub(lhs: &Point, rhs: &Point) -> Option<Point> {
 struct ScreenExtent {
     top_left: Point,
     bottom_right: Point,
+    width: Coordinate,
+    height: Coordinate,
 }
 
 impl ScreenExtent {
@@ -57,6 +47,8 @@ impl ScreenExtent {
         ScreenExtent {
             top_left: (1, 1),
             bottom_right: (width, height),
+            width: width,
+            height: height,
         }
     }
 
@@ -68,7 +60,8 @@ impl ScreenExtent {
 
 trait Draw {
     fn draw(&mut self, pos: &Point, data: &str);
-    fn clear(&mut self, pos: &Point);
+    fn clear(&mut self);
+    fn update(&mut self);
 }
 
 struct SymbolDisplay<W: Write> {
@@ -78,10 +71,13 @@ struct SymbolDisplay<W: Write> {
 impl<W: Write> Draw for SymbolDisplay<W> {
     fn draw(&mut self, pos: &Point, data: &str) {
         write!(self.device, "{}{}", cursor::Goto(pos.0, pos.1), data).unwrap();
-        self.device.flush().unwrap();
     }
-    fn clear(&mut self, pos: &Point) {
-        self.draw(pos, " ");
+    fn clear(&mut self) {
+        write!(self.device, "{}{}", termion::clear::All, cursor::Goto(1, 1)).unwrap();
+        self.update();
+    }
+    fn update(&mut self) {
+        self.device.flush().unwrap();
     }
 }
 
@@ -104,6 +100,47 @@ impl<R: Read> Input for SymbolInput<R> {
             Err(_) => None,
         }
     }
+}
+
+fn draw_border(out: &mut Draw, extent: &ScreenExtent) {
+    // The upper and lower boundary char.
+    const HORZ_BOUNDARY: &'static str = "─";
+    // The left and right boundary char.
+    const VERT_BOUNDARY: &'static str = "│";
+    // The top-left corner
+    const TOP_LEFT_CORNER: &'static str = "┌";
+    // The top-right corner
+    const TOP_RIGHT_CORNER: &'static str = "┐";
+    // The bottom-left corner
+    const BOTTOM_LEFT_CORNER: &'static str = "└";
+    // The bottom-right corner
+    const BOTTOM_RIGHT_CORNER: &'static str = "┘";
+    const NEWLINE: &'static str = "\n\r";
+
+    let inner_width = extent.width as usize - 2;
+    let inner_height = extent.height as usize - 2;
+
+    let horz_border = &HORZ_BOUNDARY.repeat(inner_width);
+    let inner_line = &" ".repeat(inner_width);
+
+    let border = format!(
+        "{}{}{}",
+        format!(
+            "{}{}{}{}",
+            TOP_LEFT_CORNER, horz_border, TOP_RIGHT_CORNER, NEWLINE
+        ),
+        format!(
+            "{}{}{}{}",
+            VERT_BOUNDARY, inner_line, VERT_BOUNDARY, NEWLINE
+        ).repeat(inner_height),
+        format!(
+            "{}{}{}{}",
+            BOTTOM_LEFT_CORNER, horz_border, BOTTOM_RIGHT_CORNER, NEWLINE
+        )
+    );
+
+    out.draw(&extent.top_left, &border);
+    out.update();
 }
 
 //
@@ -280,37 +317,6 @@ impl<R: Read> Input for SymbolInput<R> {
 //             self.draw_symbol(SNAKE_BODY, *part);
 //         }
 //     }
-//     fn update(&mut self) {
-//         self.stdout.flush().unwrap();
-//     }
-//     fn reset(&mut self) {
-//         write!(self.stdout, "{}{}", termion::clear::All, cursor::Goto(1, 1)).unwrap();
-//
-//         self.stdout.write(TOP_LEFT_CORNER.as_bytes()).unwrap();
-//         for _ in 0..self.width - 2 {
-//             self.stdout.write(HORZ_BOUNDARY.as_bytes()).unwrap();
-//         }
-//         self.stdout.write(TOP_RIGHT_CORNER.as_bytes()).unwrap();
-//         self.stdout.write(b"\n\r").unwrap();
-//
-//         for h in 2..self.height - 1 {
-//             write!(
-//                 self.stdout,
-//                 "{}{}{}{}\n\r",
-//                 cursor::Goto(1, h),
-//                 VERT_BOUNDARY,
-//                 cursor::Goto(self.width, h),
-//                 VERT_BOUNDARY
-//             ).unwrap();
-//         }
-//
-//         self.stdout.write(BOTTOM_LEFT_CORNER.as_bytes()).unwrap();
-//         for _ in 0..self.width - 2 {
-//             self.stdout.write(HORZ_BOUNDARY.as_bytes()).unwrap();
-//         }
-//         self.stdout.write(BOTTOM_RIGHT_CORNER.as_bytes()).unwrap();
-//         self.stdout.write(b"\n\r").unwrap();
-//     }
 // }
 
 fn main() {
@@ -319,7 +325,13 @@ fn main() {
     let stdout = stdout.into_raw_mode().unwrap();
 
     let mut display = SymbolDisplay { device: stdout };
-    display.draw(&(10,10), "Hello!");
+
+    let termsize = termion::terminal_size().ok();
+    let width = termsize.map(|(w, _)| w).unwrap_or(70);
+    let height = termsize.map(|(_, h)| h).unwrap_or(30);
+
+    let extent = ScreenExtent::new(width, height);
+    draw_border(&mut display, &extent);
 
     let stdin = async_stdin();
     let input = SymbolInput { device: stdin };
