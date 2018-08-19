@@ -1,9 +1,9 @@
 extern crate termion;
 
-// use std::collections::VecDeque;
+use std::collections::VecDeque;
 use std::io::{self, Read, Write};
-// use std::thread::sleep;
-// use std::time::{Duration, Instant};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
@@ -176,74 +176,131 @@ fn game_state_transition(state: &GameState, input: &mut Input) -> GameState {
     }
 }
 
-//
-// enum Direction {
-//     Up,
-//     Down,
-//     Left,
-//     Right,
-// }
-//
-// fn move_point(pt: Point, dir: Direction) -> Option<Point> {
-//     match dir {
-//         Direction::Up => pt - Point(0, 1),
-//     }
-// }
-// fn move_ord(width: u16, ord: u32, dir: Direction) -> u32 {
-//     let pos = ord2coord(width, ord);
-//     match dir {
-//         Direction::Up => coord2ord(width, pos.0, pos.1 - 1),
-//         Direction::Down => coord2ord(width, pos.0, pos.1 + 1),
-//         Direction::Left => coord2ord(width, pos.0 - 1, pos.1),
-//         Direction::Right => coord2ord(width, pos.0 + 1, pos.1),
-//     }
-// }
-//
+#[derive(Clone, Copy, Debug)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
 
-// struct Snake {
-//     body: VecDeque<Point>,
-//     direction: Direction,
-// }
-//
-// impl Snake {
-//     fn head(&self) -> Point {
-//         assert!(!self.body.is_empty());
-//         self.body.back().unwrap()
-//     }
-//
-//     fn crawl(&self) -> Self {
-//         let mut new_snake = Snake {
-//             body: self.body.clone(),
-//             direction: self.direction,
-//         };
-//         //let new_head =
-//     }
-// }
+fn key_to_direction(key: Option<Key>) -> Option<Direction> {
+    match key {
+        Some(Key::Up) => Some(Direction::Up),
+        Some(Key::Down) => Some(Direction::Down),
+        Some(Key::Left) => Some(Direction::Left),
+        Some(Key::Right) => Some(Direction::Right),
+        _ => None,
+    }
+}
+
+fn move_point(pt: &Point, dir: &Direction) -> Option<Point> {
+    match dir {
+        Direction::Up => checked_sub(&pt, &(0, 1)),
+        Direction::Down => checked_add(&pt, &(0, 1)),
+        Direction::Left => checked_sub(&pt, &(1, 0)),
+        Direction::Right => checked_add(&pt, &(1, 0)),
+    }
+}
+
+#[derive(Debug)]
+struct Snake {
+    body: VecDeque<Point>,
+    direction: Direction,
+}
+
+impl Snake {
+    fn new(head: Point, direction: Direction) -> Self {
+        let mut body = VecDeque::new();
+        body.push_back(head);
+        Snake { body, direction }
+    }
+    fn update(&self, direction: Option<Direction>) -> Option<Snake> {
+        match direction {
+            Some(dir) => Some(
+                Snake {
+                    body: self.body.clone(),
+                    direction: dir,
+                }.crawl(),
+            ),
+            _ => None,
+        }
+    }
+    // fn head(&self) -> Point {
+    //     assert!(!self.body.is_empty());
+    //     self.body.back().unwrap()
+    // }
+    //
+    fn crawl(&self) -> Self {
+        let direction = self.direction;
+        let mut body = self.body.clone();
+        assert!(!body.is_empty());
+        if let Some(new_head) = move_point(body.back().unwrap(), &direction) {
+            body.push_back(new_head);
+            body.pop_front().unwrap();
+        }
+        Snake { body, direction }
+    }
+}
+
+trait Drawable {
+    fn draw(&self, output: &mut Draw);
+    fn clear(&self, output: &mut Draw);
+}
+
+impl Drawable for Snake {
+    fn clear(&self, output: &mut Draw) {
+        for x in &self.body {
+            output.draw(&x, " ");
+        }
+    }
+    fn draw(&self, output: &mut Draw) {
+        for x in &self.body {
+            output.draw(&x, "@");
+        }
+    }
+}
 
 struct Game<I: Input, D: Draw> {
     screen: ScreenExtent,
     input: I,
     output: D,
     state: GameState,
+    snake: Snake,
 }
 
 impl<I: Input, D: Draw> Game<I, D> {
     fn new(input: I, output: D, screen: ScreenExtent) -> Self {
+        let snake = Snake::new((screen.width / 2, screen.height / 2), Direction::Up);
         Game {
             screen: screen,
             input: input,
             output: output,
             state: GameState::Begin,
+            snake: snake,
         }
     }
+
     fn run(&mut self) {
         loop {
             match self.state {
                 GameState::Begin => {
                     self.output.clear();
                     draw_border(&mut self.output, &self.screen);
+                    self.output.update();
                 }
-                GameState::InGame(_) => {}
+                GameState::InGame(key) => {
+                    self.output.draw(
+                        &self.screen.top_left,
+                        &format!("{}Key: {:?}", termion::clear::CurrentLine, key),
+                    );
+                    if let Some(new_snake) = self.snake.update(key_to_direction(key)) {
+                        self.snake.clear(&mut self.output);
+                        self.snake = new_snake;
+                    }
+                    self.snake.draw(&mut self.output);
+                    self.output.update();
+                }
                 GameState::GameOver => {}
                 GameState::Quit => {
                     self.output.clear();
@@ -251,6 +308,7 @@ impl<I: Input, D: Draw> Game<I, D> {
                 }
             }
             self.state = game_state_transition(&self.state, &mut self.input);
+            sleep(Duration::from_millis(200));
         }
     }
 }
@@ -369,16 +427,18 @@ impl<I: Input, D: Draw> Game<I, D> {
 
 fn main() {
     let stdin = async_stdin();
-    let input = SymbolInput { device: stdin };
 
     let stdout = io::stdout();
     let stdout = stdout.lock();
     let stdout = stdout.into_raw_mode().unwrap();
-    let mut output = SymbolDisplay { device: stdout };
 
     let extent = ScreenExtent::from_terminal((70, 30));
 
-    Game::new(input, output, extent).run();
+    Game::new(
+        SymbolInput { device: stdin },
+        SymbolDisplay { device: stdout },
+        extent,
+    ).run();
 }
 
 #[cfg(test)]
