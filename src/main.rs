@@ -215,22 +215,23 @@ impl Snake {
         body.push_back(head);
         Snake { body, direction }
     }
-    fn update(&self, direction: Option<Direction>) -> Option<Snake> {
-        match direction {
-            Some(dir) => Some(
-                Snake {
-                    body: self.body.clone(),
-                    direction: dir,
-                }.crawl(),
-            ),
-            _ => None,
-        }
+    fn update(&self, direction: Option<Direction>) -> Snake {
+        Snake {
+            body: self.body.clone(),
+            direction: match direction {
+                Some(Direction::Up) | Some(Direction::Down) => match self.direction {
+                    Direction::Left | Direction::Right => direction.unwrap(),
+                    _ => self.direction,
+                },
+                Some(Direction::Left) | Some(Direction::Right) => match self.direction {
+                    Direction::Up | Direction::Down => direction.unwrap(),
+                    _ => self.direction,
+                },
+                _ => self.direction,
+            },
+        }.crawl()
     }
-    // fn head(&self) -> Point {
-    //     assert!(!self.body.is_empty());
-    //     self.body.back().unwrap()
-    // }
-    //
+
     fn crawl(&self) -> Self {
         let direction = self.direction;
         let mut body = self.body.clone();
@@ -240,6 +241,28 @@ impl Snake {
             body.pop_front().unwrap();
         }
         Snake { body, direction }
+    }
+
+    fn head(&self) -> &Point {
+        assert!(!self.body.is_empty());
+        return self.body.back().unwrap();
+    }
+
+    fn eat(&self, food: &Point) -> Option<Snake> {
+        if self.head() == food {
+            let mut body = self.body.clone();
+            body.push_front(*self.body.front().unwrap());
+            return Some(Snake {
+                body,
+                direction: self.direction,
+            });
+        } else {
+            None
+        }
+    }
+    fn self_cross(&self) -> bool {
+        let head = self.head();
+        self.body.len() > 1 && self.body.iter().filter(|&x| x == head).count() == 1
     }
 }
 
@@ -267,6 +290,7 @@ struct Game<I: Input, D: Draw> {
     output: D,
     state: GameState,
     snake: Snake,
+    food: Point,
 }
 
 impl<I: Input, D: Draw> Game<I, D> {
@@ -278,6 +302,7 @@ impl<I: Input, D: Draw> Game<I, D> {
             output: output,
             state: GameState::Begin,
             snake: snake,
+            food: (10, 15),
         }
     }
 
@@ -290,48 +315,40 @@ impl<I: Input, D: Draw> Game<I, D> {
                     self.output.update();
                 }
                 GameState::InGame(key) => {
-                    self.output.draw(
-                        &self.screen.top_left,
-                        &format!("{}Key: {:?}", termion::clear::CurrentLine, key),
-                    );
-                    if let Some(new_snake) = self.snake.update(key_to_direction(key)) {
-                        self.snake.clear(&mut self.output);
-                        self.snake = new_snake;
+                    self.snake.clear(&mut self.output);
+                    self.snake = self.snake.update(key_to_direction(key));
+                    // if let Some(snake) = self.snake.eat(&self.food) {
+                    //     self.snake = snake;
+                    //     self.food = (self.food.1, self.food.0);
+                    // }
+
+                    if !self.screen.contains(&self.snake.head()) {
+                        self.state = GameState::GameOver;
+                    } else if self.snake.self_cross() {
+                        self.state = GameState::GameOver;
+                    } else {
+                        self.snake.draw(&mut self.output);
+                        self.output.update();
                     }
-                    self.snake.draw(&mut self.output);
+                }
+                GameState::GameOver => {
+                    self.output.clear();
+                    self.output.draw(
+                        &(self.screen.width / 2 - 5, self.screen.height / 2),
+                        "Game Over",
+                    );
                     self.output.update();
                 }
-                GameState::GameOver => {}
                 GameState::Quit => {
                     self.output.clear();
                     return;
                 }
             }
             self.state = game_state_transition(&self.state, &mut self.input);
-            sleep(Duration::from_millis(200));
+            sleep(Duration::from_millis(300));
         }
     }
 }
-
-//     fn new(stdin: R, stdout: W) -> Self {
-//
-//         let snake = Snake {
-//             head: coord2ord(width, width / 2, height / 2),
-//             body: VecDeque::new(),
-//             //direction: Direction::Up,
-//         };
-//         let food = coord2ord(width, width / 4, height / 3);
-//
-//         Game {
-//             width: width,
-//             height: height,
-//             stdin: stdin,
-//             stdout: stdout,
-//             rate: 100,
-//             snake: snake,
-//             food: food,
-//         }
-//     }
 //     fn start(&mut self) {
 //         self.reset();
 //
@@ -364,66 +381,6 @@ impl<I: Input, D: Draw> Game<I, D> {
 //             }
 //         }
 //     }
-//     fn move_snake(&mut self, dir: Direction) {
-//         if self.snake.head == 0 {
-//             return;
-//         }
-//         let tail = ord2coord(self.width, self.snake.tail());
-//         write!(self.stdout, "{} ", cursor::Goto(tail.0, tail.1)).unwrap();
-//
-//         let new_head = move_ord(self.width, self.snake.head, dir);
-//         if new_head == self.food {
-//             let tail = self.snake.tail();
-//             self.snake.body.push_back(tail);
-//         }
-//         if self.snake.body.contains(&new_head) {
-//             self.game_over();
-//         //  game over
-//         } else if self.is_border(new_head) {
-//             self.game_over();
-//         // game over
-//         } else {
-//             self.snake.crawl(new_head);
-//         }
-//     }
-//     fn game_over(&mut self) {
-//         let head = self.snake.head;
-//         self.snake.head = 0;
-//         self.draw_symbol(" ", head);
-//
-//         let body = self.snake.body.clone();
-//         self.snake.body.clear();
-//         for part in &body {
-//             self.draw_symbol(" ", *part);
-//         }
-//
-//         let food = self.food;
-//         self.food = 0;
-//         self.draw_symbol(" ", food);
-//
-//         write!(
-//             self.stdout,
-//             "{}GAME OVER!",
-//             cursor::Goto(self.width / 2 - 5, self.height / 2)
-//         ).unwrap();
-//     }
-//     fn is_border(&self, ord: u32) -> bool {
-//         let pos = ord2coord(self.width, ord);
-//         pos.0 == 1 || pos.0 == self.width || pos.1 == 1 || pos.1 == self.height - 1
-//     }
-//     fn draw_food(&mut self) {
-//         let food = self.food;
-//         self.draw_symbol(SNAKE_FOOD, food);
-//     }
-//     fn draw_snake(&mut self) {
-//         let head = self.snake.head;
-//         self.draw_symbol(SNAKE_HEAD, head);
-//         let body = self.snake.body.clone();
-//         for part in &body {
-//             self.draw_symbol(SNAKE_BODY, *part);
-//         }
-//     }
-// }
 
 fn main() {
     let stdin = async_stdin();
